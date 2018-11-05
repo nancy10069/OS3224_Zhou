@@ -1,0 +1,239 @@
+From c6b66c36f675ecd559f6af7253a69498af4652b1 Mon Sep 17 00:00:00 2001
+From: Yuhong Zhang <yz3385@nyu.edu>
+Date: Wed, 7 Mar 2018 20:23:04 -0500
+Subject: [PATCH] Implement date system call
+
+---
+ Makefile  |  7 ++++---
+ date.c    | 48 ++++++++++++++++++++++++++++++++++++++++++++++++
+ syscall.c | 33 ++++++++++++++++++++++++++++++++-
+ syscall.h |  1 +
+ sysproc.c | 11 +++++++++--
+ user.h    |  1 +
+ usys.S    |  1 +
+ 7 files changed, 96 insertions(+), 6 deletions(-)
+ create mode 100644 date.c
+
+diff --git a/Makefile b/Makefile
+index b4fd9a2..0868e6f 100644
+--- a/Makefile
++++ b/Makefile
+@@ -32,7 +32,7 @@ OBJS = \
+ # TOOLPREFIX = i386-jos-elf
+ 
+ # Using native tools (e.g., on X86 Linux)
+-#TOOLPREFIX = 
++#TOOLPREFIX =
+ 
+ # Try to infer the correct TOOLPREFIX if not set
+ ifndef TOOLPREFIX
+@@ -172,13 +172,14 @@ UPROGS=\
+ 	_usertests\
+ 	_wc\
+ 	_zombie\
++	_date\
+ 
+ fs.img: mkfs README $(UPROGS)
+ 	./mkfs fs.img README $(UPROGS)
+ 
+ -include *.d
+ 
+-clean: 
++clean:
+ 	rm -f *.tex *.dvi *.idx *.aux *.log *.ind *.ilg \
+ 	*.o *.d *.asm *.sym vectors.S bootblock entryother \
+ 	initcode initcode.out kernel xv6.img fs.img kernelmemfs mkfs \
+@@ -210,7 +211,7 @@ QEMUGDB = $(shell if $(QEMU) -help | grep -q '^-gdb'; \
+ ifndef CPUS
+ CPUS := 2
+ endif
+-QEMUOPTS = -hdb fs.img xv6.img -smp $(CPUS) -m 512 $(QEMUEXTRA)
++QEMUOPTS = -drive file=fs.img,index=1,media=disk,format=raw -drive file=xv6.img,index=0,media=disk,format=raw -smp $(CPUS) -m 512 $(QEMUEXTRA) -display none
+ 
+ qemu: fs.img xv6.img
+ 	$(QEMU) -serial mon:stdio $(QEMUOPTS)
+diff --git a/date.c b/date.c
+new file mode 100644
+index 0000000..7a4ad9b
+--- /dev/null
++++ b/date.c
+@@ -0,0 +1,48 @@
++#include "types.h"
++#include "user.h"
++#include "date.h"
++
++int
++main(int argc, char *argv[])
++{
++	struct rtcdate r;
++
++	if (date(&r)) {
++		printf(2, "date failed\n");
++		exit();
++	}
++
++  // your code to print the time in any format you like...
++	r.hour -= 5;
++
++	if((int)r.hour < 0){
++		r.day -= 1;
++		r.hour += 24;
++	}
++
++
++	if(r.day == 0){
++		r.month -= 1;
++		if(r.month == 0 || r.month == 1 || r.month == 3 || r.month == 5 ||
++			r.month == 7 || r.month == 8 || r.month == 10){
++			r.day = 31;
++			}
++		else if(r.month == 4 || r.month == 6 || r.month == 9 || r.month == 11){
++			r.day = 30;
++		}
++		else{
++			if((r.year % 4 == 0 && r.year % 100 != 0) || r.year % 400 == 0) r.day = 29;
++			else r.day = 28;
++		}
++	}
++
++	if(r.month == 1){
++		r.month += 12;
++		r.year -= 1;
++	}
++
++	printf(1, "%d-%d-%d %d:%d:%d\n",
++	r.year, r.month, r.day, r.hour, r.minute, r.second);
++
++	exit();
++}
+diff --git a/syscall.c b/syscall.c
+index 799ebc2..d1e4807 100644
+--- a/syscall.c
++++ b/syscall.c
+@@ -55,7 +55,7 @@ int
+ argptr(int n, char **pp, int size)
+ {
+   int i;
+-  
++
+   if(argint(n, &i) < 0)
+     return -1;
+   if((uint)i >= proc->sz || (uint)i+size > proc->sz)
+@@ -98,6 +98,7 @@ extern int sys_unlink(void);
+ extern int sys_wait(void);
+ extern int sys_write(void);
+ extern int sys_uptime(void);
++extern int sys_date(void);
+ 
+ static int (*syscalls[])(void) = {
+ [SYS_fork]    sys_fork,
+@@ -121,8 +122,36 @@ static int (*syscalls[])(void) = {
+ [SYS_link]    sys_link,
+ [SYS_mkdir]   sys_mkdir,
+ [SYS_close]   sys_close,
++[SYS_date]    sys_date,
+ };
+ 
++//part1
++/*static char* syscallnames[] = {
++[SYS_fork]    "fork",
++[SYS_exit]    "exit",
++[SYS_wait]    "wait",
++[SYS_pipe]    "pipe",
++[SYS_read]    "read",
++[SYS_kill]    "kill",
++[SYS_exec]    "exec",
++[SYS_fstat]   "fstat",
++[SYS_chdir]   "chdir",
++[SYS_dup]     "dup",
++[SYS_getpid]  "getpid",
++[SYS_sbrk]    "sbrk",
++[SYS_sleep]   "sleep",
++[SYS_uptime]  "uptime",
++[SYS_open]    "open",
++[SYS_write]   "write",
++[SYS_mknod]   "mknod",
++[SYS_unlink]  "unlink",
++[SYS_link]    "link",
++[SYS_mkdir]   "mkdir",
++[SYS_close]   "close",
++//new
++[SYS_date]    "date",
++};*/
++
+ void
+ syscall(void)
+ {
+@@ -131,6 +160,8 @@ syscall(void)
+   num = proc->tf->eax;
+   if(num > 0 && num < NELEM(syscalls) && syscalls[num]) {
+     proc->tf->eax = syscalls[num]();
++    //this is for part 1
++    //cprintf("%s -> %d\n", syscallnames[num], proc->tf->eax, num);
+   } else {
+     cprintf("%d %s: unknown sys call %d\n",
+             proc->pid, proc->name, num);
+diff --git a/syscall.h b/syscall.h
+index bc5f356..1a620b9 100644
+--- a/syscall.h
++++ b/syscall.h
+@@ -20,3 +20,4 @@
+ #define SYS_link   19
+ #define SYS_mkdir  20
+ #define SYS_close  21
++#define SYS_date   22
+diff --git a/sysproc.c b/sysproc.c
+index 027a5e5..0076684 100644
+--- a/sysproc.c
++++ b/sysproc.c
+@@ -61,7 +61,7 @@ sys_sleep(void)
+ {
+   int n;
+   uint ticks0;
+-  
++
+   if(argint(0, &n) < 0)
+     return -1;
+   acquire(&tickslock);
+@@ -83,9 +83,16 @@ int
+ sys_uptime(void)
+ {
+   uint xticks;
+-  
++
+   acquire(&tickslock);
+   xticks = ticks;
+   release(&tickslock);
+   return xticks;
+ }
++
++int sys_date(void){
++  struct rtcdate* r;
++  if(argptr(0, (void*)&r, sizeof(&r)) < 0) return -1;
++  cmostime(r);
++  return 0;
++}
+diff --git a/user.h b/user.h
+index f45b8d5..4eafb26 100644
+--- a/user.h
++++ b/user.h
+@@ -23,6 +23,7 @@ int getpid(void);
+ char* sbrk(int);
+ int sleep(int);
+ int uptime(void);
++int date(struct rtcdate*);
+ 
+ // ulib.c
+ int stat(char*, struct stat*);
+diff --git a/usys.S b/usys.S
+index 8bfd8a1..ba76d54 100644
+--- a/usys.S
++++ b/usys.S
+@@ -29,3 +29,4 @@ SYSCALL(getpid)
+ SYSCALL(sbrk)
+ SYSCALL(sleep)
+ SYSCALL(uptime)
++SYSCALL(date)
+-- 
+2.7.4
+
