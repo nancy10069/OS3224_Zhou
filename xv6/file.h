@@ -22,6 +22,17 @@ struct inode {
   short nlink;
   uint size;
   uint addrs[NDIRECT+1];
+
+
+  //unit second;
+
+  uint second;
+  uint minute;
+  uint hour;
+  uint day;
+  uint month;
+  uint year;
+
 };
 #define I_BUSY 0x1
 #define I_VALID 0x2

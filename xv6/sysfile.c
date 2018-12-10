@@ -262,6 +262,27 @@ create(char *path, short type, short major, short minor)
   ip->major = major;
   ip->minor = minor;
   ip->nlink = 1;
+
+
+  //time
+  struct rtcdate r;
+
+  r.second = 0;
+  r.minute = 0;
+  r.hour = 0;
+  r.day = 0;
+  r.month = 0;
+  r.year = 0;
+
+  cmostime(&r);
+  ip->second = r.second;
+  ip->minute = r.minute;
+  ip->hour = r.hour;
+  ip->day = r.day;
+  ip->month = r.month;
+  ip->year = r.year;
+
+
   iupdate(ip);
 
   if(type == T_DIR){  // Create . and .. entries.

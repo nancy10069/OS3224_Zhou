@@ -223,16 +223,29 @@ rsect(uint sec, void *buf)
 uint
 ialloc(ushort type)
 {
-  uint inum = freeinode++;
-  struct dinode din;
+	uint inum = freeinode++;
+	struct dinode din;
 
-  bzero(&din, sizeof(din));
-  din.type = xshort(type);
-  din.nlink = xshort(1);
-  din.size = xint(0);
-  winode(inum, &din);
-  return inum;
+	bzero(&din, sizeof(din));
+	din.type = xshort(type);
+	din.nlink = xshort(1);
+	din.size = xint(0);
+
+	time_t totalTime;
+	struct tm * date;
+	time(&totalTime);
+	date = gmtime(&totalTime);
+	din.second = date->tm_sec;
+	din.minute = date->tm_min;
+	din.hour = date->tm_hour;
+	din.day = date->tm_mday;
+	din.month = date->tm_mon;
+	din.year = date->tm_year;
+
+	winode(inum, &din);
+	return inum;
 }
+
 
 void
 balloc(int used)
